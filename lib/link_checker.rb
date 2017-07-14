@@ -206,8 +206,7 @@ class LinkChecker
         end
         unless @options[:no_warnings]
           warnings.each do |warning|
-            puts "   Warning: #{warning.uri_string}".yellow
-            puts "     Redirected to: #{warning.final_destination_uri_string}".yellow
+            puts '   Warning: '.yellow + warning.uri_string.light_blue + " redirected to ".yellow + warning.final_destination_uri_string.light_blue
           end
         end
         unless @options[:no_info]
@@ -216,15 +215,15 @@ class LinkChecker
           end
         end
       else
-        puts "Problem: #{page_name}".red
+        puts "Problem: #{page_name}".light_red
         errors.each do |error|
-          puts "   Link: #{error.uri_string}".red
-          case error
-          when Redirect
-            puts "     Redirected to: #{error.final_destination_uri_string}".red
-          when Error
-            puts "     Response: #{error.error.to_s}".red
-          end
+          message = case error
+                    when Redirect
+                      ' redirected to: '.light_red + error.final_destination_uri_string.light_blue
+                    when Error
+                      " failed: #{error.error.to_s}".light_red
+                    end
+          puts '   Link: '.light_red + error.uri_string.light_blue + message
         end
       end
     end
