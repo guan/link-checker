@@ -24,6 +24,7 @@ class LinkChecker
     @links = []
     @errors = []
     @warnings = []
+    @info = []
     @return_code = 0
 
     @options[:max_threads] ||= 4
@@ -53,8 +54,11 @@ class LinkChecker
   #
   # @param uri [URI] A URI object for the target URL.
   # @return [LinkChecker::Result] One of the following objects: {LinkChecker::Good},
-  #   {LinkChecker::Redirect}, or {LinkChecker::Error}.
-  def self.check_uri(uri, redirected=false)
+  #   {LinkChecker::Redirect}, {LinkChecker::Error} or {LinkChecker::Skipped}.
+  def self.check_uri(uri, exclusions, redirected=false)
+    exclusions.each do |r|
+      return Skipped.new(:uri_string => uri.to_s) if uri.to_s =~ r
+    end
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true if uri.scheme == "https"
     http.start do
@@ -76,7 +80,7 @@ class LinkChecker
               # using the current uri as a base.
               URI.join("#{uri.scheme}://#{uri.host}:#{uri.port}", response['location'])
             end          
-          return self.check_uri(uri, true)
+          return self.check_uri(uri, exclusions, true)
         else
           return Error.new(:uri_string => uri.to_s, :error => response)
         end
@@ -158,7 +162,7 @@ class LinkChecker
         threads << Thread.new do
           begin
             uri = URI(uri_string)
-            response = self.class.check_uri(uri)
+            response = self.class.check_uri(uri, @options[:exclusions] || [])
             response.uri_string = uri_string
             @SEMAPHORE.synchronize { results << response }
           rescue => error
@@ -179,6 +183,7 @@ class LinkChecker
   def report_results(page_name, results)
     errors = results.select{|result| result.class.eql? Error}
     warnings = results.select{|result| result.class.eql? Redirect}
+    info = results.select{|result| result.class.eql? Skipped}
     @return_code = 1 unless errors.empty?
     if @options[:warnings_are_errors]
       @return_code = 1 unless warnings.empty?
@@ -190,6 +195,7 @@ class LinkChecker
       # This must be thread-exclusive to avoid a race condition.
       @errors = @errors.concat(errors)
       @warnings = @warnings.concat(warnings)
+      @info = @info.concat(info)
 
       if errors.empty?
         message = "Checked: #{page_name}"
@@ -202,6 +208,11 @@ class LinkChecker
           warnings.each do |warning|
             puts "   Warning: #{warning.uri_string}".yellow
             puts "     Redirected to: #{warning.final_destination_uri_string}".yellow
+          end
+        end
+        unless @options[:no_info]
+          info.each do |i|
+            puts "   Info: Skipping #{i.uri_string}".yellow
           end
         end
       else
@@ -233,6 +244,10 @@ class LinkChecker
 
   # A good result.  The URL is valid.
   class Good < Result
+  end
+
+  # Not checked.
+  class Skipped < Result
   end
 
   # A redirection to another URL.
