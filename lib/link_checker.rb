@@ -6,6 +6,7 @@ require 'uri'
 require 'colorize'
 require 'anemone'
 require 'certified'
+require 'thread'
 
 class LinkChecker
 
@@ -26,6 +27,8 @@ class LinkChecker
     @return_code = 0
 
     @options[:max_threads] ||= 4
+
+    @SEMAPHORE = Mutex.new
   end
 
   # Find a list of HTML files in the @target path, which was set in the {#initialize} method.
@@ -150,16 +153,16 @@ class LinkChecker
       threads = []
       results = []
       self.class.external_link_uri_strings(page).each do |uri_string|
-        Thread.exclusive { @links << page }
+        @SEMAPHORE.synchronize { @links << page }
         wait_to_spawn_thread
         threads << Thread.new do
           begin
             uri = URI(uri_string)
             response = self.class.check_uri(uri)
             response.uri_string = uri_string
-            Thread.exclusive { results << response }
+            @SEMAPHORE.synchronize { results << response }
           rescue => error
-            Thread.exclusive { results <<
+            @SEMAPHORE.synchronize { results <<
               Error.new( :error => error.to_s, :uri_string => uri_string) }
           end
         end
@@ -182,7 +185,7 @@ class LinkChecker
       errors = errors + warnings
       warnings = []
     end
-    Thread.exclusive do
+    @SEMAPHORE.synchronize do
       # Store the results in the LinkChecker instance.
       # This must be thread-exclusive to avoid a race condition.
       @errors = @errors.concat(errors)
