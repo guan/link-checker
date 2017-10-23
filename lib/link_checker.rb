@@ -149,16 +149,16 @@ class LinkChecker
       threads = []
       results = []
       self.class.external_link_uri_strings(page).each do |uri_string|
-        Thread.exclusive { @links << page }
+        Thread::Mutex.new.synchronize { @links << page }
         wait_to_spawn_thread
         threads << Thread.new do
           begin
             uri = URI(uri_string)
             response = self.class.check_uri(uri)
             response.uri_string = uri_string
-            Thread.exclusive { results << response }
+            Thread::Mutex.new.synchronize { results << response }
           rescue => error
-            Thread.exclusive { results <<
+            Thread::Mutex.new.synchronize { results <<
               Error.new( :error => error.to_s, :uri_string => uri_string) }
           end
         end
