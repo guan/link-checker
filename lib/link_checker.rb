@@ -181,7 +181,7 @@ class LinkChecker
       errors = errors + warnings
       warnings = []
     end
-    Thread.exclusive do
+    Thread::Mutex.new.synchronize do
       # Store the results in the LinkChecker instance.
       # This must be thread-exclusive to avoid a race condition.
       @errors = @errors.concat(errors)
